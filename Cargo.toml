@@ -1,0 +1,15 @@
+[workspace]
+resolver = "2"
+members = ["crates/keyfold-core", "crates/keyfold-agent", "crates/keyfold-cli"]
+
+[workspace.package]
+edition = "2021"
+license = "AGPL-3.0-only"
+authors = ["Suman Kumar"]
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true

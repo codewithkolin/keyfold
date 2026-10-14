@@ -12,7 +12,9 @@ fn arg(name: &str) -> Option<String> {
 }
 
 fn main() {
-    let seed_hex = std::env::var("KEYFOLD_LICENCE_SEED").expect("set KEYFOLD_LICENCE_SEED");
+    let seed_hex = std::env::var("KEYFOLD_LICENCE_SEED")
+        .or_else(|_| std::env::var("KEYFOLD_LICENCE_LIVE_SEED"))
+        .expect("set KEYFOLD_LICENCE_SEED or KEYFOLD_LICENCE_LIVE_SEED");
     let seed: [u8; 32] = (0..32)
         .map(|i| u8::from_str_radix(&seed_hex.trim()[i * 2..i * 2 + 2], 16).expect("seed hex"))
         .collect::<Vec<_>>()

@@ -1,7 +1,10 @@
 //! Issue a licence token by hand (support, comps, re-sends).
 //!   KEYFOLD_LICENCE_SEED=<64 hex> cargo run -p keyfold-core --example issue -- \
-//!       --email someone@example.com --plan lifetime|yearly [--days 380] [--issued-at <unix ms>]
-//! Purchases are issued automatically by the licence server; the seed must match its LICENCE_SEED.
+//!       --email someone@example.com --plan lifetime|yearly [--days 380] [--issued-at <unix ms>] \
+//!       [--device XXXX-XXXX-XXXX-XXXX --purchase <purchase key fingerprint>]
+//! Without --device it prints a purchase key; with it, a licence for that one computer.
+//! Purchases are issued automatically by the licence server; the seed must match its
+//! KEYFOLD_LICENCE_{TEST,LIVE}_SEED.
 use keyfold_core::{Licence, LicencePlan};
 
 fn arg(name: &str) -> Option<String> {
@@ -38,6 +41,10 @@ fn main() {
         plan,
         issued_at,
         expires_at,
+        device: arg("--device").map(|d| {
+            keyfold_core::device::normalise_code(&d).expect("--device is not a computer code")
+        }),
+        purchase: arg("--purchase"),
     };
     println!("{}", keyfold_core::licence::sign(&lic, &seed).unwrap());
 }

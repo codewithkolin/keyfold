@@ -6,13 +6,13 @@ use hkdf::Hkdf;
 use sha2::Sha256;
 use zeroize::Zeroizing;
 
+use crate::base32;
 use crate::crypto::{random_bytes, KEY_LEN};
 use crate::error::{Error, Result};
 
 pub const CODE_BYTES: usize = 20;
 const CODE_CHARS: usize = 32; // 160 bits / 5
 pub const PREFIX: &str = "KFLD";
-const ALPHABET: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 const INFO: &[u8] = b"keyfold/recovery/v1";
 
 pub struct RecoveryCode(Zeroizing<[u8; CODE_BYTES]>);
@@ -32,7 +32,7 @@ impl RecoveryCode {
 
     /// `KFLD-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX`
     pub fn display(&self) -> Zeroizing<String> {
-        let raw = encode(&self.0);
+        let raw = base32::encode(self.0.as_ref());
         let mut out = String::with_capacity(PREFIX.len() + 1 + CODE_CHARS + 7);
         out.push_str(PREFIX);
         for (i, c) in raw.chars().enumerate() {
@@ -70,7 +70,8 @@ impl RecoveryCode {
                 })
                 .collect(),
         );
-        let bytes = decode(&mapped).ok_or(Error::InvalidFormat("recovery code"))?;
+        let bytes =
+            base32::decode::<CODE_BYTES>(&mapped).ok_or(Error::InvalidFormat("recovery code"))?;
         Ok(Self(Zeroizing::new(bytes)))
     }
 
@@ -82,44 +83,6 @@ impl RecoveryCode {
             .map_err(|_| Error::Kdf("hkdf expand".into()))?;
         Ok(out)
     }
-}
-
-fn encode(bytes: &[u8; CODE_BYTES]) -> String {
-    let mut out = String::with_capacity(CODE_CHARS);
-    let mut buf: u32 = 0;
-    let mut bits = 0u32;
-    for &b in bytes {
-        buf = (buf << 8) | u32::from(b);
-        bits += 8;
-        while bits >= 5 {
-            bits -= 5;
-            out.push(ALPHABET[((buf >> bits) & 31) as usize] as char);
-            buf &= (1 << bits) - 1;
-        }
-    }
-    out
-}
-
-fn decode(s: &str) -> Option<[u8; CODE_BYTES]> {
-    if s.len() != CODE_CHARS {
-        return None;
-    }
-    let mut out = [0u8; CODE_BYTES];
-    let mut i = 0;
-    let mut buf: u32 = 0;
-    let mut bits = 0u32;
-    for c in s.bytes() {
-        let v = ALPHABET.iter().position(|&a| a == c)? as u32;
-        buf = (buf << 5) | v;
-        bits += 5;
-        if bits >= 8 {
-            bits -= 8;
-            out[i] = ((buf >> bits) & 0xff) as u8;
-            i += 1;
-            buf &= (1 << bits) - 1;
-        }
-    }
-    (i == CODE_BYTES && bits == 0).then_some(out)
 }
 
 #[cfg(test)]

@@ -5,7 +5,10 @@
 //! See `docs/VAULT_FORMAT.md` for the on-disk format.
 #![forbid(unsafe_code)]
 
+mod base32;
+pub mod blocklist;
 pub mod crypto;
+pub mod device;
 pub mod envfile;
 pub mod error;
 pub mod format;
@@ -18,6 +21,7 @@ pub mod time;
 pub mod totp;
 pub mod vault;
 
+pub use blocklist::BlockList;
 pub use error::{Error, Limit, Result};
 pub use licence::{Licence, LicencePlan};
 pub use model::*;

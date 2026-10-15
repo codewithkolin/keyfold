@@ -24,6 +24,8 @@ pub enum Error {
     NotFound,
     #[error("invalid licence: {0}")]
     Licence(&'static str),
+    #[error("invalid block list: {0}")]
+    BlockList(&'static str),
     #[error("this vault has no Recovery Kit")]
     NoRecovery,
     #[error("that recovery code does not open this vault")]

@@ -23,6 +23,8 @@ fn main() {
             plan: keyfold_core::LicencePlan::Lifetime,
             issued_at: keyfold_core::time::now_ms(),
             expires_at: None,
+            device: None,
+            purchase: None,
         };
         println!(
             "DEV LICENCE TOKEN: {}",

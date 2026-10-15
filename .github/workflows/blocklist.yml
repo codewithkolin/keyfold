@@ -1,0 +1,35 @@
+name: Block list
+
+# Copies the signed list of blocked licences from the licence server onto the latest release,
+# where Keyfold downloads it next to its daily update check. Keyfold verifies the signature
+# itself; this job only checks the file is a block list before uploading it.
+on:
+  schedule:
+    - cron: "23 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch the list
+        run: curl -fsS --retry 3 https://licence.keyfold.app/blocklist -o blocklist.json
+      - name: Check it is a block list
+        run: |
+          python3 - <<'PY'
+          import base64, json
+          payload = open("blocklist.json").read().strip().split(".")[0]
+          data = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+          assert data["v"] == 1 and isinstance(data["fps"], list), data
+          print(f'{len(data["fps"])} blocked, generated at {data["generated_at"]}')
+          PY
+      - name: Upload to the latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName 2>/dev/null || true)
+          if [ -z "$tag" ]; then echo "No release yet; nothing to update."; exit 0; fi
+          gh release upload "$tag" blocklist.json --clobber --repo "$GITHUB_REPOSITORY"

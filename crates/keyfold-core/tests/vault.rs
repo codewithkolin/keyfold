@@ -231,6 +231,8 @@ fn licence_tokens_verify_offline() {
         plan: LicencePlan::Yearly,
         issued_at: 1_000,
         expires_at: Some(2_000),
+        device: None,
+        purchase: None,
     };
     let token = licence::sign(&lic, &seed).unwrap();
     assert_eq!(licence::verify(&token, &pk, 1_500).unwrap(), lic);
@@ -247,6 +249,8 @@ fn licence_tokens_verify_offline() {
     let lifetime = Licence {
         plan: LicencePlan::Lifetime,
         expires_at: None,
+        device: None,
+        purchase: None,
         ..lic
     };
     let t = licence::sign(&lifetime, &seed).unwrap();

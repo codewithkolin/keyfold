@@ -415,3 +415,100 @@ fn restore_replaces_the_vault_and_keeps_the_old_one_as_bak1() {
     let same = Vault::open(&path, b"pw").unwrap();
     assert!(matches!(same.restore_into(&path), Err(Error::Backup(_))));
 }
+
+#[test]
+fn secrets_move_and_copy_between_environments() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("t.keyfold");
+    let mut v = Vault::create(&path, b"correct horse battery staple", fast()).unwrap();
+    let b = &mut v.body;
+    let pro = Plan::Pro;
+    let p1 = b.add_project("Acme", "", pro).unwrap();
+    let dev = b.add_environment(&p1, "development").unwrap();
+    let prod = b.add_environment(&p1, "production").unwrap();
+    let p2 = b.add_project("Other", "", pro).unwrap();
+    let other = b.add_environment(&p2, "staging").unwrap();
+    let a = b.add_secret(&dev, sample_secret("A"), pro).unwrap();
+    let k = b.add_secret(&dev, sample_secret("KEEP"), pro).unwrap();
+    b.add_secret(&prod, sample_secret("KEEP"), pro).unwrap();
+    let names = |b: &keyfold_core::VaultBody, env: &str| -> Vec<String> {
+        b.projects
+            .iter()
+            .flat_map(|p| &p.environments)
+            .find(|e| e.id == env)
+            .unwrap()
+            .secrets
+            .iter()
+            .map(|s| s.key.clone())
+            .collect()
+    };
+
+    // Move keeps the id and everything else; the clash is skipped without `replace`.
+    let out = b
+        .transfer_secrets(&[a.clone(), k.clone()], &prod, false, false, pro)
+        .unwrap();
+    assert_eq!((out.transferred, out.replaced, out.skipped), (1, 0, 1));
+    assert_eq!(names(b, &dev), ["KEEP"]);
+    assert_eq!(names(b, &prod), ["KEEP", "A"]);
+    let (_, env, moved) = b.find_secret(&a).unwrap();
+    assert_eq!(
+        (env.id.as_str(), moved.value.as_str(), moved.notes.as_str()),
+        (prod.as_str(), "value-of-A", "n")
+    );
+
+    // With `replace`, the target's KEEP is overwritten by the moved one.
+    let out = b
+        .transfer_secrets(std::slice::from_ref(&k), &prod, false, true, pro)
+        .unwrap();
+    assert_eq!((out.transferred, out.replaced, out.skipped), (1, 1, 0));
+    assert!(names(b, &dev).is_empty());
+    assert_eq!(names(b, &prod), ["A", "KEEP"]);
+    assert_eq!(b.find_secret(&k).unwrap().1.id, prod);
+
+    // Copy to another project: new id, the original stays.
+    let out = b
+        .transfer_secrets(std::slice::from_ref(&a), &other, true, false, pro)
+        .unwrap();
+    assert_eq!(out.transferred, 1);
+    assert_eq!(names(b, &other), ["A"]);
+    assert_eq!(b.find_secret(&a).unwrap().1.id, prod);
+    let copy = b.projects[1].environments[0].secrets[0].id.clone();
+    assert_ne!(copy, a);
+
+    // Already there: nothing happens. Unknown id: an error, nothing changed.
+    assert_eq!(
+        b.transfer_secrets(std::slice::from_ref(&a), &prod, false, false, pro)
+            .unwrap(),
+        Default::default()
+    );
+    assert!(b
+        .transfer_secrets(&["nope".into()], &prod, false, false, pro)
+        .is_err());
+}
+
+#[test]
+fn copies_respect_the_free_plan_but_moves_do_not() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("t.keyfold");
+    let mut v = Vault::create(&path, b"correct horse battery staple", fast()).unwrap();
+    let b = &mut v.body;
+    let p = b.add_project("Acme", "", Plan::Free).unwrap();
+    let dev = b.add_environment(&p, "development").unwrap();
+    let prod = b.add_environment(&p, "production").unwrap();
+    let mut ids = Vec::new();
+    for i in 0..25 {
+        ids.push(
+            b.add_secret(&dev, sample_secret(&format!("K{i}")), Plan::Free)
+                .unwrap(),
+        );
+    }
+    assert!(
+        b.transfer_secrets(&ids[..1], &prod, true, false, Plan::Free)
+            .is_err(),
+        "copy over the limit"
+    );
+    let out = b
+        .transfer_secrets(&ids[..3], &prod, false, false, Plan::Free)
+        .unwrap();
+    assert_eq!(out.transferred, 3, "moves never add items");
+}

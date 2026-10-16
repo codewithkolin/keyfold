@@ -77,6 +77,17 @@ fn clean(s: &str) -> String {
     s.trim().to_string()
 }
 
+/// What [`VaultBody::transfer_secrets`] did.
+#[derive(Serialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TransferOutcome {
+    /// Moved or copied, including those that replaced a key of the same name.
+    pub transferred: usize,
+    /// Existing keys in the target that were overwritten.
+    pub replaced: usize,
+    /// Left out because the target already has a key with that name.
+    pub skipped: usize,
+}
+
 impl VaultBody {
     pub fn secret_count(&self) -> usize {
         self.projects
@@ -282,6 +293,77 @@ impl VaultBody {
             }
         }
         Err(Error::NotFound)
+    }
+
+    fn secret_index(&self, secret_id: &str) -> Option<(usize, usize, usize)> {
+        for (pi, p) in self.projects.iter().enumerate() {
+            for (ei, e) in p.environments.iter().enumerate() {
+                if let Some(si) = e.secrets.iter().position(|s| s.id == secret_id) {
+                    return Some((pi, ei, si));
+                }
+            }
+        }
+        None
+    }
+
+    /// Move (or copy) secrets into `env_id`, keeping value, notes, tags, URL and expiry.
+    /// A key whose name already exists in the target replaces it when `replace` is set and is
+    /// skipped otherwise, so an environment never holds the same name twice. Secrets already in
+    /// the target are left alone. A move keeps the secret's id; a copy gets a new one and counts
+    /// against the free plan (a copy that replaces an existing key doesn't).
+    pub fn transfer_secrets(
+        &mut self,
+        ids: &[String],
+        env_id: &str,
+        copy: bool,
+        replace: bool,
+        plan: Plan,
+    ) -> Result<TransferOutcome> {
+        let (tp, te) = self.env_index(env_id)?;
+        let now = now_ms();
+        let mut out = TransferOutcome::default();
+        let mut seen = std::collections::HashSet::new();
+        for id in ids {
+            if !seen.insert(id.as_str()) {
+                continue;
+            }
+            let (pi, ei, si) = self.secret_index(id).ok_or(Error::NotFound)?;
+            if (pi, ei) == (tp, te) {
+                continue;
+            }
+            let key = self.projects[pi].environments[ei].secrets[si].key.clone();
+            match self.projects[tp].environments[te]
+                .secrets
+                .iter()
+                .position(|s| s.key == key)
+            {
+                Some(_) if !replace => {
+                    out.skipped += 1;
+                    continue;
+                }
+                // Source and target are different environments, so `si` stays valid.
+                Some(clash) => {
+                    self.projects[tp].environments[te].secrets.remove(clash);
+                    out.replaced += 1;
+                }
+                None if copy => self.ensure_can_add_item(plan)?,
+                None => {}
+            }
+            let mut secret = if copy {
+                let mut c = self.projects[pi].environments[ei].secrets[si].clone();
+                c.id = new_id();
+                c.created_at = now;
+                c
+            } else {
+                self.projects[pi].environments[ei].secrets.remove(si)
+            };
+            secret.updated_at = now;
+            self.projects[tp].environments[te].secrets.push(secret);
+            self.projects[pi].updated_at = now;
+            self.projects[tp].updated_at = now;
+            out.transferred += 1;
+        }
+        Ok(out)
     }
 
     pub fn find_secret(&self, secret_id: &str) -> Option<(&Project, &Environment, &Secret)> {

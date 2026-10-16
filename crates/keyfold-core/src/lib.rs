@@ -27,5 +27,5 @@ pub use licence::{Licence, LicencePlan};
 pub use model::*;
 pub use patterns::{classify, Detection};
 pub use recovery::RecoveryCode;
-pub use store::{Limits, PasswordInput, Plan, SecretInput};
+pub use store::{Limits, PasswordInput, Plan, SecretInput, TransferOutcome};
 pub use vault::{KdfSettings, Vault};

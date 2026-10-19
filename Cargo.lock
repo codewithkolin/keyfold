@@ -705,7 +705,7 @@ dependencies = [
 
 [[package]]
 name = "keyfold-agent"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "dirs",
  "interprocess",
@@ -717,7 +717,7 @@ dependencies = [
 
 [[package]]
 name = "keyfold-cli"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -732,7 +732,7 @@ dependencies = [
 
 [[package]]
 name = "keyfold-core"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "argon2",
  "base64 0.22.1",

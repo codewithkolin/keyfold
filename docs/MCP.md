@@ -10,7 +10,11 @@ keyfold names -p acme -e production               # secret names only
 keyfold env -p acme -e production                 # writes ./.env (add it to .gitignore)
 keyfold env -p acme -e production --stdout        # prints instead
 keyfold run -p acme -e production -- npm start    # injects secrets as environment variables
+keyfold create-project acme -e development -e staging   # environments default to development, production
+keyfold import -p acme -e development -f .env.local    # imports a .env file (default ./.env)
 ```
+
+`keyfold run` starts the command directly, not through a shell, so `$VARS` in it are expanded by your shell before Keyfold injects anything; wrap the command in `sh -c '…'` when it needs the injected values itself.
 
 If Keyfold is locked, the command says so; unlock the app and run it again. "Allow for 1 hour" in the approval sheet covers the same project and environment for that client, so a `keyfold run` loop does not prompt every time.
 
@@ -43,6 +47,8 @@ claude mcp add keyfold -- keyfold mcp
 | `keyfold_write_env` | Write a `.env` file for an environment at a path | Number of keys written |
 | `keyfold_run` | Run a shell command with the environment injected | Exit code and output (truncated to 20 KB). Secret values appear only if the command prints them |
 | `keyfold_store` | Add or update one secret | Confirmation |
+| `keyfold_create_project` | Create a project with environments (default: development and production); safe to call twice | Project and environment names |
+| `keyfold_import_env` | Import every `KEY=VALUE` line of a `.env` file into an environment; the MCP process reads the file, so values never pass through the model | Counts of keys added and updated |
 
 There is deliberately no "reveal" tool. A prompt injection inside the agent cannot ask Keyfold for values; the worst it can do is run a command that prints them, which you see in the approval sheet before it runs.
 

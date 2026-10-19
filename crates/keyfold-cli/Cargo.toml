@@ -1,6 +1,6 @@
 [package]
 name = "keyfold-cli"
-version = "0.1.0"
+version = "1.0.0"
 description = "Keyfold command line and MCP server"
 edition.workspace = true
 license.workspace = true

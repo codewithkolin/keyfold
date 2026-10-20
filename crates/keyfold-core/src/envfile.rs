@@ -5,6 +5,8 @@
 /// `\n`, `\t`, `\"`, `\\` escapes inside double quotes.
 pub fn parse_env(text: &str) -> Vec<(String, String)> {
     let mut out = Vec::new();
+    // Editors on Windows often start a file with a byte-order mark; it isn't part of the first key.
+    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     for raw in text.lines() {
         let line = raw.trim();
         if line.is_empty() || line.starts_with('#') {
@@ -112,6 +114,13 @@ pub fn render_env<'a>(pairs: impl IntoIterator<Item = (&'a str, &'a str)>) -> St
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn byte_order_mark_is_not_part_of_the_first_key() {
+        let parsed = parse_env("\u{feff}API_KEY=abc\nOTHER=1\n");
+        assert_eq!(parsed[0], ("API_KEY".to_string(), "abc".to_string()));
+        assert_eq!(parsed.len(), 2);
+    }
 
     #[test]
     fn parses_common_shapes() {

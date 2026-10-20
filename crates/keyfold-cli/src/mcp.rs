@@ -12,7 +12,7 @@ use rmcp::{
     schemars, tool, tool_handler, tool_router, ErrorData as McpError, ServerHandler, ServiceExt,
 };
 
-use keyfold_agent::{call, AgentError, ClientInfo, Op, Reply};
+use keyfold_agent::{call, call_for, AgentError, ClientInfo, Op, Purpose, Reply};
 
 #[derive(Clone)]
 pub struct Keyfold {
@@ -177,12 +177,13 @@ impl Keyfold {
         &self,
         Parameters(p): Parameters<WriteEnvParams>,
     ) -> Result<CallToolResult, McpError> {
-        match call(
+        match call_for(
             client(),
             Op::Env {
                 project: p.project.clone(),
                 environment: p.environment.clone(),
             },
+            Some(Purpose::Write(p.path.clone())),
         )
         .await
         {
@@ -216,12 +217,13 @@ impl Keyfold {
         &self,
         Parameters(p): Parameters<RunParams>,
     ) -> Result<CallToolResult, McpError> {
-        let entries = match call(
+        let entries = match call_for(
             client(),
             Op::Env {
                 project: p.project,
                 environment: p.environment,
             },
+            Some(Purpose::Run(p.command.clone())),
         )
         .await
         {

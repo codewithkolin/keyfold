@@ -6,7 +6,7 @@ use std::process::Stdio;
 
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
-use keyfold_agent::{call, ClientInfo, Op, Reply};
+use keyfold_agent::{call, call_for, ClientInfo, Op, Purpose, Reply};
 
 #[derive(Parser)]
 #[command(
@@ -118,12 +118,19 @@ async fn main() -> Result<()> {
             out,
             stdout,
         } => {
-            let Reply::Env { entries } = call(
+            let path = out.unwrap_or_else(|| PathBuf::from(".env"));
+            let purpose = if stdout {
+                Purpose::Print
+            } else {
+                Purpose::Write(absolute(&path).display().to_string())
+            };
+            let Reply::Env { entries } = call_for(
                 me,
                 Op::Env {
                     project: project.clone(),
                     environment: environment.clone(),
                 },
+                Some(purpose),
             )
             .await?
             else {
@@ -135,7 +142,6 @@ async fn main() -> Result<()> {
             if stdout {
                 print!("{text}");
             } else {
-                let path = out.unwrap_or_else(|| PathBuf::from(".env"));
                 std::fs::write(&path, text)
                     .with_context(|| format!("writing {}", path.display()))?;
                 eprintln!(
@@ -150,12 +156,13 @@ async fn main() -> Result<()> {
             environment,
             command,
         } => {
-            let Reply::Env { entries } = call(
+            let Reply::Env { entries } = call_for(
                 me,
                 Op::Env {
                     project,
                     environment,
                 },
+                Some(Purpose::Run(shell_words(&command))),
             )
             .await?
             else {
@@ -233,6 +240,35 @@ async fn main() -> Result<()> {
 
 mod mcp;
 
+/// The command as you'd type it, for the approval sheet: arguments with spaces or quotes are
+/// single-quoted.
+fn shell_words(args: &[String]) -> String {
+    args.iter()
+        .map(|a| {
+            if !a.is_empty()
+                && a.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "-_./=:@%+,".contains(c))
+            {
+                a.clone()
+            } else {
+                format!("'{}'", a.replace('\'', "'\\''"))
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// The full path a relative output path will be written to.
+fn absolute(path: &std::path::Path) -> PathBuf {
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .map(|d| d.join(path))
+            .unwrap_or_else(|_| path.to_path_buf())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -280,6 +316,18 @@ mod tests {
         };
         assert_eq!((out, stdout), (Some(PathBuf::from("x.env")), true));
         assert!(parse(&["env", "-p", "Acme"]).is_err());
+    }
+
+    #[test]
+    fn shell_words_quotes_only_what_needs_it() {
+        let w = |a: &[&str]| shell_words(&a.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+        assert_eq!(w(&["npm", "test"]), "npm test");
+        assert_eq!(
+            w(&["sh", "-c", "node scripts/seed.js"]),
+            "sh -c 'node scripts/seed.js'"
+        );
+        assert_eq!(w(&["echo", "it's"]), "echo 'it'\\''s'");
+        assert_eq!(w(&["printf", ""]), "printf ''");
     }
 
     #[test]

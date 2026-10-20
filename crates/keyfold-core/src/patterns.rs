@@ -67,7 +67,7 @@ static RULES: LazyLock<Vec<Rule>> = LazyLock::new(|| {
         rule!(
             "Anthropic API key",
             "ANTHROPIC_API_KEY",
-            "https://console.anthropic.com/settings/keys",
+            "https://platform.claude.com/settings/keys",
             r"^sk-ant-[A-Za-z0-9_-]{20,}$"
         ),
         rule!(

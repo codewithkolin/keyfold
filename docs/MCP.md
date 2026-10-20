@@ -2,6 +2,10 @@
 
 Keyfold ships one extra binary, `keyfold`. It talks to the running Keyfold app over a local socket. **Every request is approved by you in the Keyfold window**, and the app never hands secret values to an AI model: the MCP tools write `.env` files or run commands on the agent's behalf.
 
+## Get the `keyfold` command
+
+On a Mac it comes inside the app from 1.0.1: `/Applications/Keyfold.app/Contents/MacOS/keyfold`. To use it by name, open **Settings › General › Command line and MCP** and click **Install**: that links `/usr/local/bin/keyfold` to the app's copy (macOS asks for your password if that folder isn't yours). Or use the full path wherever a command is expected, for example `claude mcp add keyfold -- /Applications/Keyfold.app/Contents/MacOS/keyfold mcp`. Keyfold 1.0.0 didn't include it; update the app if `keyfold` isn't there.
+
 ## Command line
 
 ```
@@ -16,7 +20,7 @@ keyfold import -p acme -e development -f .env.local    # imports a .env file (de
 
 `keyfold run` starts the command directly, not through a shell, so `$VARS` in it are expanded by your shell before Keyfold injects anything; wrap the command in `sh -c '…'` when it needs the injected values itself.
 
-If Keyfold is locked, the command says so; unlock the app and run it again. "Allow for 1 hour" in the approval sheet covers the same project and environment for that client, so a `keyfold run` loop does not prompt every time.
+If Keyfold is locked, the command says so; unlock the app and run it again. "Allow for 1 hour" in the approval sheet covers the same project and environment for that client, whatever command runs, so a `keyfold run` loop does not prompt every time.
 
 ## MCP server for Cursor, Claude Code, and others
 
@@ -50,11 +54,11 @@ claude mcp add keyfold -- keyfold mcp
 | `keyfold_create_project` | Create a project with environments (default: development and production); safe to call twice | Project and environment names |
 | `keyfold_import_env` | Import every `KEY=VALUE` line of a `.env` file into an environment; the MCP process reads the file, so values never pass through the model | Counts of keys added and updated |
 
-There is deliberately no "reveal" tool. A prompt injection inside the agent cannot ask Keyfold for values; the worst it can do is run a command that prints them, which you see in the approval sheet before it runs.
+There is deliberately no "reveal" tool. A prompt injection inside the agent cannot ask Keyfold for values; the worst it can do is run a command that prints them, and from 1.0.1 the approval sheet shows that command before anything runs. Under a one-hour grant later commands run without a new sheet, so keep your agent's own prompt on for `keyfold_run` too.
 
 ### The approval sheet
 
-Each request shows the client name and process id, the action, and whether it reads values. Choices: Deny, Allow once, Allow for 1 hour (same client, project and environment). Requests time out after three minutes if nobody answers. Locking Keyfold cancels all grants.
+Each request shows the client name and process id, the action, whether it reads values, and, from 1.0.1, what the values are for: the command `keyfold_run` or `keyfold run` will start, the file `keyfold_write_env` or `keyfold env` will write, or that `keyfold env --stdout` will print them. Choices: Deny, Allow once, Allow for 1 hour (same client name, project and environment, whatever the command; every MCP client is named `keyfold-mcp`). Requests time out after three minutes if nobody answers. While Keyfold is locked it refuses every request, and locking ends every grant (from 1.0.1).
 
 ### Socket
 

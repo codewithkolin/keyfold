@@ -1,6 +1,6 @@
 [package]
 name = "keyfold-agent"
-version = "1.0.0"
+version = "1.0.1"
 description = "Local socket protocol between the Keyfold app and its CLI / MCP server"
 edition.workspace = true
 license.workspace = true

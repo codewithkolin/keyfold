@@ -139,12 +139,28 @@ impl Op {
     }
 }
 
+/// What a client will do with the values it asks for, shown in the approval sheet. Self-reported,
+/// like the client name: Keyfold's own CLI and MCP server do exactly what they say here.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(tag = "kind", content = "detail", rename_all = "snake_case")]
+pub enum Purpose {
+    /// Start this command with the values as environment variables.
+    Run(String),
+    /// Write a .env file at this path.
+    Write(String),
+    /// Print the values to the terminal.
+    Print,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Request {
     pub v: u32,
     pub id: String,
     pub client: ClientInfo,
     pub op: Op,
+    /// Sent by clients from 1.0.1 on; older ones leave it out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub purpose: Option<Purpose>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -269,6 +285,15 @@ pub fn socket_name() -> std::io::Result<Name<'static>> {
 
 /// Send one request to the running app and wait for its answer.
 pub async fn call(client: ClientInfo, op: Op) -> Result<Reply, AgentError> {
+    call_for(client, op, None).await
+}
+
+/// [`call`], saying what the values are for, so the approval sheet can show it.
+pub async fn call_for(
+    client: ClientInfo,
+    op: Op,
+    purpose: Option<Purpose>,
+) -> Result<Reply, AgentError> {
     let name = socket_name().map_err(|e| AgentError::new("internal", e.to_string()))?;
     let stream = Stream::connect(name).await.map_err(|_| {
         AgentError::new(
@@ -282,6 +307,7 @@ pub async fn call(client: ClientInfo, op: Op) -> Result<Reply, AgentError> {
         id: uuid::Uuid::new_v4().to_string(),
         client,
         op,
+        purpose,
     };
     let mut line =
         serde_json::to_string(&req).map_err(|e| AgentError::new("internal", e.to_string()))?;
@@ -319,6 +345,25 @@ pub async fn call(client: ClientInfo, op: Op) -> Result<Reply, AgentError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn purpose_is_optional_on_the_wire() {
+        // A 1.0.0 client sends no purpose; the app must still read its request.
+        let old = r#"{"v":1,"id":"x","client":{"name":"keyfold-cli","pid":1},"op":{"type":"env","project":"Acme","environment":"dev"}}"#;
+        let req: Request = serde_json::from_str(old).unwrap();
+        assert_eq!(req.purpose, None);
+        let mut req = req;
+        req.purpose = Some(Purpose::Run("npm test".into()));
+        let line = serde_json::to_string(&req).unwrap();
+        assert!(
+            line.contains(r#""purpose":{"kind":"run","detail":"npm test"}"#),
+            "{line}"
+        );
+        let back: Request = serde_json::from_str(&line).unwrap();
+        assert_eq!(back.purpose, Some(Purpose::Run("npm test".into())));
+        let print = serde_json::to_string(&Purpose::Print).unwrap();
+        assert_eq!(print, r#"{"kind":"print"}"#);
+    }
 
     #[test]
     fn ops_describe_and_roundtrip() {
